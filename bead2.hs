@@ -10,24 +10,36 @@ import System.Environment
 import Text.Pandoc.Builder
 import Data.String
 
-getMeta :: Meta -> Maybe String
-getMeta meta = case (lookupMeta "liftheader" meta) of
-  Just (MetaString s) -> Just s
-  Nothing -> Nothing
-
-retrieveMaybeInt :: Maybe String -> Int
-retrieveMaybeInt val = case val of
-  Just (val) -> read val
+getIncrement :: Meta -> Int
+getIncrement meta = case (lookupMeta "liftheader" meta) of
+  Just (MetaString s) -> read s
   Nothing -> 0
 
-f :: Pandoc -> Pandoc
-f p@(Pandoc m _) = walk (elevateHeader (retrieveMaybeInt liftheaderMeta)) p
-  where
-    liftheaderMeta = getMeta m
+getMaxLevel :: Meta -> Int
+getMaxLevel meta = case (lookupMeta "maxheader" meta) of
+  Just (MetaString s) -> read s
+  Nothing -> maxBound :: Int
 
-elevateHeader :: Int -> Block -> Block
-elevateHeader increment (Header level attribs contents) = Header (level + increment) attribs contents 
-elevateHeader increment x = x
+raiseToMax :: Int -> Int -> Block -> Maybe Block
+raiseToMax inc max (Header lvl attribs contents)
+  | lvl + inc > max = Nothing
+  | otherwise       = Just (Header (lvl + inc) attribs contents)
+raiseToMax inc max block = Just block
+
+runMaybeBlock :: Maybe Pandoc -> Pandoc
+runMaybeBlock block = case block of
+  Just block -> block
+  Nothing -> doc(para(fromString "Hiba történt."))
+
+f :: Pandoc -> Pandoc
+f p@(Pandoc m _) = runMaybeBlock (walkM (raiseToMax getincmeta getmaxmeta) p)
+  where
+    getincmeta = getIncrement m
+    getmaxmeta = getMaxLevel m
+
+--elevateHeader :: Int -> Block -> Block
+--elevateHeader increment (Header level attribs contents) = Header (level + increment) attribs contents 
+--elevateHeader increment x = x
 
 main :: IO () 
 main = toJSONFilter f
