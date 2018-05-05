@@ -40,8 +40,8 @@ abcFilter p@(Pandoc m _) = runMaybeBlock (walkM (raiseToMax getincmeta getmaxmet
     getincmeta = getIncrement m
     getmaxmeta = getMaxLevel m
 
-f :: [Int] -> Int -> [Int]
-f oldState currentLevel
+stepNumbering :: [Int] -> Int -> [Int]
+stepNumbering oldState currentLevel
   | (length oldState) < currentLevel = oldState ++ [1]
   | (length oldState) > currentLevel = (take (currentLevel-1) oldState) ++ [last (take currentLevel oldState) + 1]
   | otherwise                        = (take currentLevel oldState) ++ [(last oldState + 1)]
@@ -49,13 +49,26 @@ f oldState currentLevel
 writeState :: [Int] -> String
 writeState state = (intercalate "." $ map show state) ++ "."
 
-enumerateChapter :: Block -> [Int] -> (Block, [Int])
-enumerateChapter (Header lvl attribs contents) state 
-  = ((Header lvl attribs (toList (str (writeState(f state lvl))) ++ contents)), f state lvl)
-enumerateChapter b state = (b, state)
+--enumerateChapter :: Block -> [Int] -> (Block, [Int])
+--enumerateChapter (Header lvl attribs contents) state 
+--  = ((Header lvl attribs (toList (str (writeState(stepNumbering state lvl))) ++ contents)), stepNumbering state lvl)
+--enumerateChapter b state = (b, state)
+
+enumerateChapter' :: Block -> [Int] -> Block
+enumerateChapter' (Header lvl attribs contents) numbering
+  = (Header lvl attribs (toList (str (writeState numbering)) ++ contents))
+enumerateChapter' b state = b
+
 
 enumApply :: Block -> State [Int] Block
-enumApply b = state $ enumerateChapter b
+enumApply b@(Header lvl attribs contents) = do
+  prevNumbering <- get
+  put $ stepNumbering prevNumbering lvl
+  newNumbering <- get
+  pure $ enumerateChapter' b newNumbering
+-- enumerateChapter b prevNumbering
+-- state $ enumerateChapter b
+enumApply b = pure b
 
 enumFilter :: Pandoc -> Pandoc
 enumFilter p = evalState (walkM enumApply p) [0]
