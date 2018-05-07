@@ -52,11 +52,6 @@ stepNumbering oldState currentLevel
 writeState :: [Int] -> String
 writeState state = (intercalate "." $ map show state) ++ ". "
 
---enumerateChapter :: Block -> [Int] -> (Block, [Int])
---enumerateChapter (Header lvl attribs contents) state 
---  = ((Header lvl attribs (toList (str (writeState(stepNumbering state lvl))) ++ contents)), stepNumbering state lvl)
---enumerateChapter b state = (b, state)
-
 enumerateChapter' :: Block -> [Int] -> Block
 enumerateChapter' (Header lvl attribs contents) numbering
   = (Header lvl attribs (toList (str (writeState numbering)) ++ contents))
@@ -68,8 +63,6 @@ enumApply b@(Header lvl attribs contents) = do
   put $ stepNumbering prevNumbering lvl
   newNumbering <- get
   pure $ enumerateChapter' b newNumbering
--- enumerateChapter b prevNumbering
--- state $ enumerateChapter b
 enumApply b = pure b
 
 enumFilter :: Pandoc -> Pandoc
@@ -83,9 +76,6 @@ getMaxNum :: Meta -> Int -> Int
 getMaxNum m lvl = 
   let x = read <$> fromMeta <$> lookupMeta ("maxnum_" ++ show lvl) m
     in maybe maxBound id x
-
-getMaxNum' :: Meta -> String
-getMaxNum' m = show m
 
 fromNumberingToString :: [Int] -> String
 fromNumberingToString [] = ""
@@ -106,10 +96,6 @@ eFilter :: Pandoc -> Pandoc
 eFilter p@(Pandoc m _) = case (evalState (runExceptT (walkM (checkMetaMaxNum m) p)) []) of
   (Left int) -> doc(para(fromString $ "Túl sok " ++ (show (head int)) ++ ". szintű fejezet: " ++ show (last int)))
   (Right pd) -> pd
-
---elevateHeader :: Int -> Block -> Block
---elevateHeader increment (Header level attribs contents) = Header (level + increment) attribs contents 
---elevateHeader increment x = x
 
 main :: IO () 
 main = toJSONFilter eFilter
