@@ -50,7 +50,7 @@ stepNumbering oldState currentLevel
   | otherwise                        = (take (currentLevel-1) oldState) ++ [(last oldState + 1)]
 
 writeState :: [Int] -> String
-writeState state = (intercalate "." $ map show state) ++ "."
+writeState state = (intercalate "." $ map show state) ++ ". "
 
 --enumerateChapter :: Block -> [Int] -> (Block, [Int])
 --enumerateChapter (Header lvl attribs contents) state 
@@ -61,7 +61,6 @@ enumerateChapter' :: Block -> [Int] -> Block
 enumerateChapter' (Header lvl attribs contents) numbering
   = (Header lvl attribs (toList (str (writeState numbering)) ++ contents))
 enumerateChapter' b state = b
-
 
 enumApply :: Block -> State [Int] Block
 enumApply b@(Header lvl attribs contents) = do
@@ -76,7 +75,6 @@ enumApply b = pure b
 enumFilter :: Pandoc -> Pandoc
 enumFilter p = evalState (walkM enumApply p) [0]
 
-
 --- E feladat
 fromMeta :: MetaValue -> String
 fromMeta (MetaString s) = s
@@ -86,20 +84,27 @@ getMaxNum m lvl =
   let x = read <$> fromMeta <$> lookupMeta ("maxnum_" ++ show lvl) m
     in maybe maxBound id x
 
-barmi :: Meta -> Block -> ExceptT Int (State [Int]) Block
-barmi m b@(Header lvl attribs contents) = do
+getMaxNum' :: Meta -> String
+getMaxNum' m = show m
+
+fromNumberingToString :: [Int] -> String
+fromNumberingToString [] = ""
+fromNumberingToString (x:xs) = (show x ++ ".") ++ (fromNumberingToString xs)
+
+checkMetaMaxNum :: Meta -> Block -> ExceptT [String] (State [Int]) Block
+checkMetaMaxNum m b@(Header lvl attribs contents) = do
   prevNumbering <- lift get
   let newNumbering = stepNumbering prevNumbering lvl
   let maxNumbering = getMaxNum m lvl
   lift $ put newNumbering
-  if (last newNumbering) >= maxNumbering 
-    then throwE (last newNumbering)
+  if (last newNumbering) > maxNumbering 
+    then throwE ([show lvl] ++ [fromNumberingToString newNumbering])
     else pure $ enumerateChapter' b newNumbering
-barmi m x = pure x
+checkMetaMaxNum m x = pure x
 
 eFilter :: Pandoc -> Pandoc
-eFilter p@(Pandoc m _) = case (evalState (runExceptT (walkM (barmi m) p)) []) of
-  (Left int) -> doc(para(fromString "Hiba történt."))
+eFilter p@(Pandoc m _) = case (evalState (runExceptT (walkM (checkMetaMaxNum m) p)) []) of
+  (Left int) -> doc(para(fromString $ "Túl sok " ++ (show (head int)) ++ ". szintű fejezet: " ++ show (last int)))
   (Right pd) -> pd
 
 --elevateHeader :: Int -> Block -> Block
