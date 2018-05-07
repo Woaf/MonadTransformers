@@ -10,6 +10,7 @@ import System.Environment
 import Text.Pandoc.Builder
 import Data.String
 import Data.List
+import Control.Monad.Trans.Except
 
 type ChapterState = State [Int]
 
@@ -40,11 +41,13 @@ abcFilter p@(Pandoc m _) = runMaybeBlock (walkM (raiseToMax getincmeta getmaxmet
     getincmeta = getIncrement m
     getmaxmeta = getMaxLevel m
 
+
+-- D feladat
 stepNumbering :: [Int] -> Int -> [Int]
 stepNumbering oldState currentLevel
-  | (length oldState) < currentLevel = oldState ++ [1]
-  | (length oldState) > currentLevel = (take (currentLevel-1) oldState) ++ [last (take currentLevel oldState) + 1]
-  | otherwise                        = (take currentLevel oldState) ++ [(last oldState + 1)]
+  | (length oldState) < currentLevel = oldState ++ (replicate (currentLevel - length(oldState)-1) 0) ++ [1]
+  | (length oldState) > currentLevel = (take (currentLevel-1) oldState) ++ [(oldState !! (currentLevel-1)) + 1]
+  | otherwise                        = (take (currentLevel-1) oldState) ++ [(last oldState + 1)]
 
 writeState :: [Int] -> String
 writeState state = (intercalate "." $ map show state) ++ "."
@@ -74,10 +77,34 @@ enumFilter :: Pandoc -> Pandoc
 enumFilter p = evalState (walkM enumApply p) [0]
 
 
+--- E feladat
+fromMeta :: MetaValue -> String
+fromMeta (MetaString s) = s
+
+getMaxNum :: Meta -> Int -> Int
+getMaxNum m lvl = 
+  let x = read <$> fromMeta <$> lookupMeta ("maxnum_" ++ show lvl) m
+    in maybe maxBound id x
+
+barmi :: Meta -> Block -> ExceptT Int (State [Int]) Block
+barmi m b@(Header lvl attribs contents) = do
+  prevNumbering <- lift get
+  let newNumbering = stepNumbering prevNumbering lvl
+  let maxNumbering = getMaxNum m lvl
+  lift $ put newNumbering
+  if (last newNumbering) >= maxNumbering 
+    then throwE (last newNumbering)
+    else pure $ enumerateChapter' b newNumbering
+barmi m x = pure x
+
+eFilter :: Pandoc -> Pandoc
+eFilter p@(Pandoc m _) = case (evalState (runExceptT (walkM (barmi m) p)) []) of
+  (Left int) -> doc(para(fromString "Hiba történt."))
+  (Right pd) -> pd
 
 --elevateHeader :: Int -> Block -> Block
 --elevateHeader increment (Header level attribs contents) = Header (level + increment) attribs contents 
 --elevateHeader increment x = x
 
 main :: IO () 
-main = toJSONFilter enumFilter
+main = toJSONFilter eFilter
